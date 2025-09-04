@@ -50,7 +50,12 @@ JWT_EXPIRATION=1800
 PASS_SALT="Lycosidae"
 ```
 
-#
+# Rotas a serem usadas 
+
+# CRUD para usuario competicao exercicos teams tags e containers
+# Adicionar membros a uma competicao
+
+
 
 
 
