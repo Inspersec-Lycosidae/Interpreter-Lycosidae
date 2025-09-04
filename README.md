@@ -53,7 +53,7 @@ PASS_SALT="Lycosidae"
 # Rotas a serem usadas 
 
 # CRUD para usuario competicao exercicos teams tags e containers
-# Adicionar membros a uma competicao
+# CRUD para tabelas de relacoes 
 
 
 

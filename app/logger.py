@@ -214,23 +214,13 @@ def _setup_sqlalchemy_logging(use_color: bool = True, pretty_json: bool = True):
     for logger_name in sqlalchemy_loggers:
         logger = logging.getLogger(logger_name)
         
-        # Remove handlers existentes
+        # Remove handlers existentes para evitar duplicação
         for handler in list(logger.handlers):
             logger.removeHandler(handler)
         
-        # Adiciona nosso handler customizado
-        handler = logging.StreamHandler()
-        formatter = BracketLevelFormatter(
-            fmt="%(levelname_br)s | %(asctime)s - %(message)s",
-            datefmt="%Y-%m-%d %H:%M:%S",
-            use_color=use_color,
-            pretty_json=pretty_json,
-        )
-        handler.setFormatter(formatter)
-        logger.addHandler(handler)
-        
-        # Habilita propagação para o root logger
+        # Apenas habilita propagação para o root logger (que já tem nosso formatter)
         logger.propagate = True
+        logger.setLevel(logging.INFO)
 
 def _setup_uvicorn_logging(use_color: bool = True):
     """Configura logging específico para uvicorn com compatibilidade."""
@@ -243,18 +233,9 @@ def _setup_uvicorn_logging(use_color: bool = True):
         for handler in list(logger.handlers):
             logger.removeHandler(handler)
     
-    # Adiciona nosso handler customizado
-    handler = logging.StreamHandler()
-    formatter = BracketLevelFormatter(
-        fmt="%(levelname_br)s | %(asctime)s - %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
-        use_color=use_color,
-        pretty_json=True,
-    )
-    handler.setFormatter(formatter)
-    
-    uvicorn_logger.addHandler(handler)
-    uvicorn_access_logger.addHandler(handler)
+    # Apenas habilita propagação para o root logger (que já tem nosso formatter)
+    uvicorn_logger.propagate = True
+    uvicorn_access_logger.propagate = True
     
     # Configura níveis específicos
     uvicorn_logger.setLevel(logging.INFO)
@@ -269,11 +250,6 @@ def _configure_third_party_loggers():
         'httpcore': logging.WARNING,
         'urllib3': logging.WARNING,
         'pymongo': logging.WARNING,
-        'sqlalchemy.engine': logging.INFO,  # Mantém INFO para ver queries
-        'sqlalchemy.pool': logging.WARNING,
-        'sqlalchemy.dialects': logging.WARNING,
-        'sqlalchemy.orm': logging.WARNING,
-        'sqlalchemy': logging.INFO,  # Logger pai do SQLAlchemy
     }
     
     for logger_name, level in third_party_loggers.items():
