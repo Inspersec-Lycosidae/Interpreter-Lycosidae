@@ -80,16 +80,32 @@ class BracketLevelFormatter(logging.Formatter):
             # Tenta detectar se a mensagem contém JSON
             if not any(char in message for char in ['{', '}', '[', ']']):
                 return message
-                
-            # Tenta fazer parse do JSON para colorir
-            json_data = json.loads(message)
-            if self.pretty_json:
-                formatted_json = json.dumps(json_data, indent=2, ensure_ascii=False)
-            else:
-                formatted_json = json.dumps(json_data, ensure_ascii=False)
             
-            # Aplica cores ao JSON formatado
-            return self._apply_json_colors(formatted_json)
+            # Verifica se a mensagem inteira é JSON
+            if message.strip().startswith('{') and message.strip().endswith('}'):
+                json_data = json.loads(message.strip())
+                if self.pretty_json:
+                    formatted_json = json.dumps(json_data, indent=2, ensure_ascii=False)
+                else:
+                    formatted_json = json.dumps(json_data, ensure_ascii=False)
+                return self._apply_json_colors(formatted_json)
+            
+            # Verifica se há JSON no final da mensagem (após quebra de linha)
+            lines = message.split('\n')
+            if len(lines) > 1 and lines[-1].strip().startswith('{'):
+                try:
+                    json_data = json.loads(lines[-1].strip())
+                    if self.pretty_json:
+                        formatted_json = json.dumps(json_data, indent=2, ensure_ascii=False)
+                    else:
+                        formatted_json = json.dumps(json_data, ensure_ascii=False)
+                    lines[-1] = self._apply_json_colors(formatted_json)
+                    return '\n'.join(lines)
+                except json.JSONDecodeError:
+                    pass
+            
+            # Se não for JSON válido, apenas coloriza estruturas JSON básicas
+            return self._apply_json_colors(message)
             
         except (json.JSONDecodeError, TypeError):
             # Se não for JSON válido, apenas coloriza estruturas JSON básicas
@@ -153,6 +169,9 @@ def setup_logging(level: int = logging.INFO, use_color: bool = True, pretty_json
         for h in list(root.handlers):
             root.removeHandler(h)
 
+    # Configura primeiro os loggers de terceiros para evitar conflitos
+    _configure_third_party_loggers()
+
     handler = logging.StreamHandler()
     formatter = BracketLevelFormatter(
         fmt="%(levelname_br)s | %(asctime)s - %(message)s",
@@ -168,9 +187,6 @@ def setup_logging(level: int = logging.INFO, use_color: bool = True, pretty_json
 
     # Configuração específica para uvicorn
     _setup_uvicorn_logging(use_color)
-    
-    # Reduz verbosidade de bibliotecas de terceiros
-    _configure_third_party_loggers()
 
     return root
 
@@ -213,10 +229,18 @@ def _configure_third_party_loggers():
         'pymongo': logging.WARNING,
         'sqlalchemy.engine': logging.WARNING,
         'sqlalchemy.pool': logging.WARNING,
+        'sqlalchemy.dialects': logging.WARNING,
+        'sqlalchemy.orm': logging.WARNING,
     }
     
     for logger_name, level in third_party_loggers.items():
-        logging.getLogger(logger_name).setLevel(level)
+        logger = logging.getLogger(logger_name)
+        logger.setLevel(level)
+        # Remove handlers existentes para evitar duplicação
+        for handler in list(logger.handlers):
+            logger.removeHandler(handler)
+        # Propaga para o root logger
+        logger.propagate = True
 
 def get_logger(name: str) -> logging.Logger:
     """Retorna um logger configurado para o módulo especificado."""
@@ -249,8 +273,13 @@ class StructuredLogger:
         
         # Formata como JSON se houver dados
         if all_data:
-            json_data = json.dumps(all_data, indent=2, ensure_ascii=False)
-            return f"{message}\n{json_data}"
+            # Para dados simples, usa formatação compacta
+            if len(all_data) <= 3 and all(isinstance(v, (str, int, float, bool)) for v in all_data.values()):
+                json_data = json.dumps(all_data, ensure_ascii=False)
+                return f"{message} {json_data}"
+            else:
+                json_data = json.dumps(all_data, indent=2, ensure_ascii=False)
+                return f"{message}\n{json_data}"
         
         return message
     
@@ -339,4 +368,52 @@ def log_http_request(logger: logging.Logger, method: str, url: str, status_code:
         'status_code': status_code,
         'response_time': response_time,
         **extra_data
-    }) 
+    })
+
+def configure_production_logging():
+    """Configura logging otimizado para produção."""
+    # Desabilita cores em produção (assumindo que não há terminal colorido)
+    setup_logging(
+        level=logging.INFO,
+        use_color=False,
+        pretty_json=False
+    )
+    
+    # Configura loggers específicos para produção
+    production_loggers = {
+        'sqlalchemy.engine': logging.ERROR,
+        'sqlalchemy.pool': logging.ERROR,
+        'httpx': logging.ERROR,
+        'httpcore': logging.ERROR,
+    }
+    
+    for logger_name, level in production_loggers.items():
+        logging.getLogger(logger_name).setLevel(level)
+
+def configure_development_logging():
+    """Configura logging otimizado para desenvolvimento."""
+    setup_logging(
+        level=logging.DEBUG,
+        use_color=True,
+        pretty_json=True
+    )
+
+def configure_test_logging():
+    """Configura logging otimizado para testes."""
+    setup_logging(
+        level=logging.WARNING,
+        use_color=False,
+        pretty_json=False
+    )
+    
+    # Silencia logs durante testes
+    test_loggers = [
+        'sqlalchemy.engine',
+        'sqlalchemy.pool',
+        'httpx',
+        'httpcore',
+        'urllib3',
+    ]
+    
+    for logger_name in test_loggers:
+        logging.getLogger(logger_name).setLevel(logging.CRITICAL) 

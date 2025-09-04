@@ -1,12 +1,21 @@
 #main.py
+import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from routers import router
 from database import init_db
-from logger import setup_logging, get_structured_logger
+from logger import (
+    configure_development_logging, 
+    configure_production_logging, 
+    get_structured_logger
+)
 
-# Configura logging global
-logger = setup_logging()
+# Configura logging baseado no ambiente
+if os.getenv("ENVIRONMENT", "development") == "production":
+    configure_production_logging()
+else:
+    configure_development_logging()
+
 app_logger = get_structured_logger("main")
 
 app = FastAPI()
