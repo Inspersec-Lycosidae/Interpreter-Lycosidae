@@ -7,10 +7,6 @@ import uuid
 
 Base = declarative_base()
 
-######################################################################
-##### Uses SqlAlchemy bases for static objects; referenced in DB #####
-######################################################################
-
 class User(Base):
     __tablename__ = 'users'
 

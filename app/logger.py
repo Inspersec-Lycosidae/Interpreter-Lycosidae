@@ -1,14 +1,18 @@
 """
 Sistema de logging personalizado para o Dashboard
 """
+import json
 import logging
 import re
+import sys
 from datetime import datetime
+from typing import Any, Dict, Optional, Union
 
 class BracketLevelFormatter(logging.Formatter):
     """
     Formatter que exibe: "YYYY-MM-DD HH:MM:SS | [LEVEL] Mensagem"
     com cores para INFO, WARNING, ERROR e CRITICAL.
+    Suporte para formatação JSON melhorada.
     """
 
     COLOR_RESET = "\033[0m"
@@ -20,12 +24,23 @@ class BracketLevelFormatter(logging.Formatter):
         logging.CRITICAL: "\033[1;31m"  # Vermelho brilhante
     }
     
+    # Cores específicas para JSON
+    JSON_COLORS = {
+        "key": "\033[34m",        # Azul para chaves
+        "string": "\033[32m",     # Verde para strings
+        "number": "\033[33m",     # Amarelo para números
+        "boolean": "\033[35m",    # Magenta para booleanos
+        "null": "\033[90m",       # Cinza para null
+        "bracket": "\033[37m",    # Branco para colchetes/chaves
+    }
+    
     # Cor para links (verde)
     LINK_COLOR = "\033[32m"
 
-    def __init__(self, fmt=None, datefmt=None, use_color=True):
+    def __init__(self, fmt=None, datefmt=None, use_color=True, pretty_json=True):
         super().__init__(fmt=fmt, datefmt=datefmt)
         self.use_color = use_color
+        self.pretty_json = pretty_json
 
     def format(self, record: logging.LogRecord) -> str:
         level_tag = f"[{record.levelname}]"
@@ -34,9 +49,10 @@ class BracketLevelFormatter(logging.Formatter):
             if color:
                 level_tag = f"{color}{level_tag}{self.COLOR_RESET}"
         
-        # Processar mensagem para colorir links
+        # Processar mensagem para colorir links e JSON
         if self.use_color:
             record.msg = self._colorize_links(str(record.msg))
+            record.msg = self._colorize_json(record.msg)
         
         # Injeta campo customizado para uso no fmt
         setattr(record, "levelname_br", level_tag)
@@ -54,8 +70,81 @@ class BracketLevelFormatter(logging.Formatter):
         # Substituir URLs encontradas
         colored_message = re.sub(url_pattern, replace_url, message)
         return colored_message
+    
+    def _colorize_json(self, message: str) -> str:
+        """Coloriza JSON na mensagem com cores específicas"""
+        if not self.use_color:
+            return message
+            
+        try:
+            # Tenta detectar se a mensagem contém JSON
+            if not any(char in message for char in ['{', '}', '[', ']']):
+                return message
+                
+            # Tenta fazer parse do JSON para colorir
+            json_data = json.loads(message)
+            if self.pretty_json:
+                formatted_json = json.dumps(json_data, indent=2, ensure_ascii=False)
+            else:
+                formatted_json = json.dumps(json_data, ensure_ascii=False)
+            
+            # Aplica cores ao JSON formatado
+            return self._apply_json_colors(formatted_json)
+            
+        except (json.JSONDecodeError, TypeError):
+            # Se não for JSON válido, apenas coloriza estruturas JSON básicas
+            return self._apply_json_colors(message)
+    
+    def _apply_json_colors(self, json_str: str) -> str:
+        """Aplica cores específicas a elementos JSON"""
+        if not self.use_color:
+            return json_str
+            
+        # Colorir chaves (strings antes de :)
+        json_str = re.sub(
+            r'"([^"]+)"\s*:',
+            rf'{self.JSON_COLORS["key"]}"\1"{self.COLOR_RESET}:',
+            json_str
+        )
+        
+        # Colorir strings (valores entre aspas)
+        json_str = re.sub(
+            r':\s*"([^"]*)"',
+            rf': {self.JSON_COLORS["string"]}"\1"{self.COLOR_RESET}',
+            json_str
+        )
+        
+        # Colorir números
+        json_str = re.sub(
+            r':\s*(\d+\.?\d*)',
+            rf': {self.JSON_COLORS["number"]}\1{self.COLOR_RESET}',
+            json_str
+        )
+        
+        # Colorir booleanos
+        json_str = re.sub(
+            r':\s*(true|false)',
+            rf': {self.JSON_COLORS["boolean"]}\1{self.COLOR_RESET}',
+            json_str
+        )
+        
+        # Colorir null
+        json_str = re.sub(
+            r':\s*(null)',
+            rf': {self.JSON_COLORS["null"]}\1{self.COLOR_RESET}',
+            json_str
+        )
+        
+        # Colorir colchetes e chaves
+        json_str = re.sub(
+            r'([\{\}\[\]])',
+            rf'{self.JSON_COLORS["bracket"]}\1{self.COLOR_RESET}',
+            json_str
+        )
+        
+        return json_str
 
-def setup_logging(level: int = logging.INFO) -> logging.Logger:
+def setup_logging(level: int = logging.INFO, use_color: bool = True, pretty_json: bool = True) -> logging.Logger:
     """Configura logging global com formatter padronizado e cores."""
     root = logging.getLogger()
 
@@ -68,7 +157,8 @@ def setup_logging(level: int = logging.INFO) -> logging.Logger:
     formatter = BracketLevelFormatter(
         fmt="%(levelname_br)s | %(asctime)s - %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
-        use_color=True,
+        use_color=use_color,
+        pretty_json=pretty_json,
     )
     handler.setFormatter(formatter)
     handler.setLevel(level)
@@ -76,12 +166,177 @@ def setup_logging(level: int = logging.INFO) -> logging.Logger:
     root.setLevel(level)
     root.addHandler(handler)
 
+    # Configuração específica para uvicorn
+    _setup_uvicorn_logging(use_color)
+    
     # Reduz verbosidade de bibliotecas de terceiros
-    logging.getLogger('apscheduler').setLevel(logging.WARNING)
-    logging.getLogger('apscheduler.executors.default').setLevel(logging.WARNING)
+    _configure_third_party_loggers()
 
     return root
 
+def _setup_uvicorn_logging(use_color: bool = True):
+    """Configura logging específico para uvicorn com compatibilidade."""
+    # Configura uvicorn para usar nosso formatter
+    uvicorn_logger = logging.getLogger("uvicorn")
+    uvicorn_access_logger = logging.getLogger("uvicorn.access")
+    
+    # Remove handlers padrão do uvicorn
+    for logger in [uvicorn_logger, uvicorn_access_logger]:
+        for handler in list(logger.handlers):
+            logger.removeHandler(handler)
+    
+    # Adiciona nosso handler customizado
+    handler = logging.StreamHandler()
+    formatter = BracketLevelFormatter(
+        fmt="%(levelname_br)s | %(asctime)s - %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+        use_color=use_color,
+        pretty_json=True,
+    )
+    handler.setFormatter(formatter)
+    
+    uvicorn_logger.addHandler(handler)
+    uvicorn_access_logger.addHandler(handler)
+    
+    # Configura níveis específicos
+    uvicorn_logger.setLevel(logging.INFO)
+    uvicorn_access_logger.setLevel(logging.INFO)
+
+def _configure_third_party_loggers():
+    """Configura níveis de log para bibliotecas de terceiros."""
+    third_party_loggers = {
+        'apscheduler': logging.WARNING,
+        'apscheduler.executors.default': logging.WARNING,
+        'httpx': logging.WARNING,
+        'httpcore': logging.WARNING,
+        'urllib3': logging.WARNING,
+        'pymongo': logging.WARNING,
+        'sqlalchemy.engine': logging.WARNING,
+        'sqlalchemy.pool': logging.WARNING,
+    }
+    
+    for logger_name, level in third_party_loggers.items():
+        logging.getLogger(logger_name).setLevel(level)
+
 def get_logger(name: str) -> logging.Logger:
     """Retorna um logger configurado para o módulo especificado."""
-    return logging.getLogger(name) 
+    return logging.getLogger(name)
+
+class StructuredLogger:
+    """Logger estruturado para diferentes contextos de aplicação."""
+    
+    def __init__(self, name: str):
+        self.logger = logging.getLogger(name)
+        self.context = {}
+    
+    def set_context(self, **kwargs):
+        """Define contexto adicional para os logs."""
+        self.context.update(kwargs)
+    
+    def clear_context(self):
+        """Limpa o contexto atual."""
+        self.context.clear()
+    
+    def _format_message(self, message: str, extra_data: Optional[Dict[str, Any]] = None) -> str:
+        """Formata mensagem com contexto e dados extras."""
+        if not self.context and not extra_data:
+            return message
+        
+        # Combina contexto e dados extras
+        all_data = {**self.context}
+        if extra_data:
+            all_data.update(extra_data)
+        
+        # Formata como JSON se houver dados
+        if all_data:
+            json_data = json.dumps(all_data, indent=2, ensure_ascii=False)
+            return f"{message}\n{json_data}"
+        
+        return message
+    
+    def debug(self, message: str, **kwargs):
+        """Log de debug com contexto."""
+        formatted_msg = self._format_message(message, kwargs)
+        self.logger.debug(formatted_msg)
+    
+    def info(self, message: str, **kwargs):
+        """Log de info com contexto."""
+        formatted_msg = self._format_message(message, kwargs)
+        self.logger.info(formatted_msg)
+    
+    def warning(self, message: str, **kwargs):
+        """Log de warning com contexto."""
+        formatted_msg = self._format_message(message, kwargs)
+        self.logger.warning(formatted_msg)
+    
+    def error(self, message: str, **kwargs):
+        """Log de error com contexto."""
+        formatted_msg = self._format_message(message, kwargs)
+        self.logger.error(formatted_msg)
+    
+    def critical(self, message: str, **kwargs):
+        """Log crítico com contexto."""
+        formatted_msg = self._format_message(message, kwargs)
+        self.logger.critical(formatted_msg)
+    
+    def log_json(self, message: str, data: Union[Dict, list], level: int = logging.INFO):
+        """Log específico para dados JSON."""
+        json_str = json.dumps(data, indent=2, ensure_ascii=False)
+        formatted_msg = f"{message}\n{json_str}"
+        self.logger.log(level, formatted_msg)
+    
+    def log_request(self, method: str, url: str, status_code: int, response_time: float, **kwargs):
+        """Log específico para requisições HTTP."""
+        self.info(
+            f"HTTP {method} {url} - {status_code}",
+            method=method,
+            url=url,
+            status_code=status_code,
+            response_time_ms=round(response_time * 1000, 2),
+            **kwargs
+        )
+    
+    def log_database(self, operation: str, table: str, duration: float, **kwargs):
+        """Log específico para operações de banco de dados."""
+        self.info(
+            f"DB {operation} on {table}",
+            operation=operation,
+            table=table,
+            duration_ms=round(duration * 1000, 2),
+            **kwargs
+        )
+    
+    def log_api_response(self, endpoint: str, status_code: int, data: Any, **kwargs):
+        """Log específico para respostas de API."""
+        self.info(
+            f"API Response: {endpoint} - {status_code}",
+            endpoint=endpoint,
+            status_code=status_code,
+            **kwargs
+        )
+        self.log_json("Response data:", data, logging.DEBUG)
+
+def get_structured_logger(name: str) -> StructuredLogger:
+    """Retorna um logger estruturado para o módulo especificado."""
+    return StructuredLogger(name)
+
+def log_json_response(logger: logging.Logger, message: str, data: Any, level: int = logging.INFO):
+    """Função utilitária para log de respostas JSON."""
+    json_str = json.dumps(data, indent=2, ensure_ascii=False)
+    formatted_msg = f"{message}\n{json_str}"
+    logger.log(level, formatted_msg)
+
+def log_http_request(logger: logging.Logger, method: str, url: str, status_code: int, 
+                    response_time: float = None, **extra_data):
+    """Função utilitária para log de requisições HTTP."""
+    msg = f"HTTP {method} {url} - {status_code}"
+    if response_time:
+        msg += f" ({response_time:.3f}s)"
+    
+    logger.info(msg, extra={
+        'method': method,
+        'url': url,
+        'status_code': status_code,
+        'response_time': response_time,
+        **extra_data
+    }) 
