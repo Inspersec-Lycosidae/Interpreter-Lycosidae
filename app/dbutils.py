@@ -14,16 +14,16 @@ if PASS_SALT is None:
 def get_user_by_email(db: Session, email: str) -> UserReadDTO:
     user = db.query(User).filter(User.email == email).first()
     if user:
-        return UserReadDTO(id=user.id, username=user.username, email=user.email)
+        return UserReadDTO(id=user.id, username=user.username, email=user.email, phone_number=user.phone_number)
     return None
 
 #Function to get all users by their username
-#Input: USername string
+#Input: Username string
 #Output: A user DTO
 def get_user_by_username(db: Session, username: str) -> UserReadDTO:
     user = db.query(User).filter(User.username == username).first()
     if user:
-        return UserReadDTO(id=user.id, username=user.username, email=user.email)
+        return UserReadDTO(id=user.id, username=user.username, email=user.email, phone_number=user.phone_number)
     return None
 
 #Function to hash a password using hash 256 (no extra safety as argon2)
@@ -41,20 +41,15 @@ def create_user(db: Session, userDTO: UserCreateDTO) -> UserReadDTO:
     #Hash password
     hashed_password = pass_hasher(userDTO.password)
 
-    #Add password to db
-    password = Password(password256=hashed_password)
-    db.add(password)
-    db.commit()
-    db.refresh(password)
-
     #Add user to db
     user = User(
         username=userDTO.username,
         email=userDTO.email,
-        id_password=password.id
+        password=hashed_password,
+        phone_number=userDTO.phone_number
     )
     db.add(user)
     db.commit()
     db.refresh(user)
 
-    return UserReadDTO(id=user.id, username=user.username, email=user.email)
+    return UserReadDTO(id=user.id, username=user.username, email=user.email, phone_number=user.phone_number)

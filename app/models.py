@@ -1,9 +1,10 @@
 # models.py
 from sqlalchemy import (
-    Column, Integer, String, DateTime, Date, Time, ForeignKey, CheckConstraint, UniqueConstraint, SmallInteger
+    Column, Integer, String, DateTime, Date, Time, ForeignKey, CheckConstraint, UniqueConstraint, SmallInteger, Boolean
 )
 from sqlalchemy.orm import relationship, declarative_base
 import uuid
+
 Base = declarative_base()
 
 ######################################################################
@@ -18,6 +19,7 @@ class User(Base):
     email = Column(String(45), nullable=False, unique=True)
     password = Column(String(256), nullable=False)
     phone_number = Column(String(20), nullable=True)
+    is_admin = Column(Boolean, default=False)
 
 class Competition(Base):
     __tablename__ = 'competitions'
