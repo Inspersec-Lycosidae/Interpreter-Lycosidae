@@ -4,7 +4,7 @@ import time
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.exc import OperationalError
-from models import Base
+from .models import Base
 
 #Read from environment (Docker provides it) - No use for python-dotenv (only if local .env)
 #URL Structure: <Database>+<Connector>://{username}:{password}@{host}:{port}/{database_name}
