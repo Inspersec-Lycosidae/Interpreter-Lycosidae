@@ -81,14 +81,17 @@ class BracketLevelFormatter(logging.Formatter):
             if not any(char in message for char in ['{', '}', '[', ']']):
                 return message
             
-            # Verifica se a mensagem inteira é JSON
+            # Verifica se a mensagem inteira é JSON válido
             if message.strip().startswith('{') and message.strip().endswith('}'):
-                json_data = json.loads(message.strip())
-                if self.pretty_json:
-                    formatted_json = json.dumps(json_data, indent=2, ensure_ascii=False)
-                else:
-                    formatted_json = json.dumps(json_data, ensure_ascii=False)
-                return self._apply_json_colors(formatted_json)
+                try:
+                    json_data = json.loads(message.strip())
+                    if self.pretty_json:
+                        formatted_json = json.dumps(json_data, indent=2, ensure_ascii=False)
+                    else:
+                        formatted_json = json.dumps(json_data, ensure_ascii=False)
+                    return self._apply_json_colors(formatted_json)
+                except json.JSONDecodeError:
+                    return message
             
             # Verifica se há JSON no final da mensagem (após quebra de linha)
             lines = message.split('\n')
@@ -104,59 +107,64 @@ class BracketLevelFormatter(logging.Formatter):
                 except json.JSONDecodeError:
                     pass
             
-            # Se não for JSON válido, apenas coloriza estruturas JSON básicas
-            return self._apply_json_colors(message)
+            # Se não for JSON válido, retorna a mensagem original
+            return message
             
-        except (json.JSONDecodeError, TypeError):
-            # Se não for JSON válido, apenas coloriza estruturas JSON básicas
-            return self._apply_json_colors(message)
+        except Exception:
+            # Se houver qualquer erro, retorna a mensagem original
+            return message
     
     def _apply_json_colors(self, json_str: str) -> str:
         """Aplica cores específicas a elementos JSON"""
         if not self.use_color:
             return json_str
+        
+        try:
+            # Primeiro, colorir colchetes e chaves
+            json_str = re.sub(
+                r'([\{\}\[\]])',
+                rf'{self.JSON_COLORS["bracket"]}\1{self.COLOR_RESET}',
+                json_str
+            )
             
-        # Colorir chaves (strings antes de :)
-        json_str = re.sub(
-            r'"([^"]+)"\s*:',
-            rf'{self.JSON_COLORS["key"]}"\1"{self.COLOR_RESET}:',
-            json_str
-        )
-        
-        # Colorir strings (valores entre aspas)
-        json_str = re.sub(
-            r':\s*"([^"]*)"',
-            rf': {self.JSON_COLORS["string"]}"\1"{self.COLOR_RESET}',
-            json_str
-        )
-        
-        # Colorir números
-        json_str = re.sub(
-            r':\s*(\d+\.?\d*)',
-            rf': {self.JSON_COLORS["number"]}\1{self.COLOR_RESET}',
-            json_str
-        )
-        
-        # Colorir booleanos
-        json_str = re.sub(
-            r':\s*(true|false)',
-            rf': {self.JSON_COLORS["boolean"]}\1{self.COLOR_RESET}',
-            json_str
-        )
-        
-        # Colorir null
-        json_str = re.sub(
-            r':\s*(null)',
-            rf': {self.JSON_COLORS["null"]}\1{self.COLOR_RESET}',
-            json_str
-        )
-        
-        # Colorir colchetes e chaves
-        json_str = re.sub(
-            r'([\{\}\[\]])',
-            rf'{self.JSON_COLORS["bracket"]}\1{self.COLOR_RESET}',
-            json_str
-        )
+            # Colorir chaves (strings antes de :)
+            json_str = re.sub(
+                r'"([^"]+)"\s*:',
+                rf'{self.JSON_COLORS["key"]}"\1"{self.COLOR_RESET}:',
+                json_str
+            )
+            
+            # Colorir strings (valores entre aspas) - mais específico
+            json_str = re.sub(
+                r':\s*"([^"]*)"',
+                rf': {self.JSON_COLORS["string"]}"\1"{self.COLOR_RESET}',
+                json_str
+            )
+            
+            # Colorir números (mais específico para evitar conflitos)
+            json_str = re.sub(
+                r':\s*(\d+\.?\d*)(?=\s*[,}\]]|$)',
+                rf': {self.JSON_COLORS["number"]}\1{self.COLOR_RESET}',
+                json_str
+            )
+            
+            # Colorir booleanos
+            json_str = re.sub(
+                r':\s*(true|false)(?=\s*[,}\]]|$)',
+                rf': {self.JSON_COLORS["boolean"]}\1{self.COLOR_RESET}',
+                json_str
+            )
+            
+            # Colorir null
+            json_str = re.sub(
+                r':\s*(null)(?=\s*[,}\]]|$)',
+                rf': {self.JSON_COLORS["null"]}\1{self.COLOR_RESET}',
+                json_str
+            )
+            
+        except Exception:
+            # Se houver erro, retorna o JSON sem cores
+            return json_str
         
         return json_str
 
@@ -227,10 +235,11 @@ def _configure_third_party_loggers():
         'httpcore': logging.WARNING,
         'urllib3': logging.WARNING,
         'pymongo': logging.WARNING,
-        'sqlalchemy.engine': logging.WARNING,
-        'sqlalchemy.pool': logging.WARNING,
-        'sqlalchemy.dialects': logging.WARNING,
-        'sqlalchemy.orm': logging.WARNING,
+        'sqlalchemy.engine': logging.ERROR,  # Apenas erros críticos
+        'sqlalchemy.pool': logging.ERROR,
+        'sqlalchemy.dialects': logging.ERROR,
+        'sqlalchemy.orm': logging.ERROR,
+        'sqlalchemy': logging.ERROR,  # Logger pai do SQLAlchemy
     }
     
     for logger_name, level in third_party_loggers.items():
@@ -239,8 +248,8 @@ def _configure_third_party_loggers():
         # Remove handlers existentes para evitar duplicação
         for handler in list(logger.handlers):
             logger.removeHandler(handler)
-        # Propaga para o root logger
-        logger.propagate = True
+        # Desabilita propagação para evitar duplicação
+        logger.propagate = False
 
 def get_logger(name: str) -> logging.Logger:
     """Retorna um logger configurado para o módulo especificado."""
@@ -393,10 +402,22 @@ def configure_production_logging():
 def configure_development_logging():
     """Configura logging otimizado para desenvolvimento."""
     setup_logging(
-        level=logging.DEBUG,
+        level=logging.INFO,  # Mudei para INFO para reduzir verbosidade
         use_color=True,
         pretty_json=True
     )
+    
+    # Configuração específica para desenvolvimento
+    dev_loggers = {
+        'sqlalchemy.engine': logging.WARNING,  # Apenas warnings e erros
+        'sqlalchemy.pool': logging.WARNING,
+        'sqlalchemy.dialects': logging.WARNING,
+        'sqlalchemy.orm': logging.WARNING,
+        'sqlalchemy': logging.WARNING,
+    }
+    
+    for logger_name, level in dev_loggers.items():
+        logging.getLogger(logger_name).setLevel(level)
 
 def configure_test_logging():
     """Configura logging otimizado para testes."""
