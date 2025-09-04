@@ -3,6 +3,7 @@ from sqlalchemy import (
     Column, Integer, String, DateTime, Date, Time, ForeignKey, CheckConstraint, UniqueConstraint, SmallInteger
 )
 from sqlalchemy.orm import relationship, declarative_base
+import uuid
 Base = declarative_base()
 
 ######################################################################
