@@ -26,6 +26,8 @@ class Competition(Base):
     invite_code = Column(String(20), nullable=False, unique=True)
     start_date = Column(DateTime, nullable=False)
     end_date = Column(DateTime, nullable=False)
+    max_teams = Column(Integer, default=20)
+    status = Column(String(20), default='created')
 
 class Exercise(Base):
     __tablename__ = 'exercises'
@@ -50,6 +52,7 @@ class Team(Base):
     competition = Column(String(36), ForeignKey('competitions.id'), nullable=False)
     creator = Column(String(36), ForeignKey('users.id'), nullable=False)
     score = Column(Integer, default=0)
+    max_members = Column(Integer, default=20)
 
 class Container(Base):
     __tablename__ = 'containers'
