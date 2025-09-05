@@ -36,16 +36,16 @@ class CompetitionCreateDTO(BaseModel):
     name: str
     organizer: str
     invite_code: str
-    start_date: datetime
-    end_date: datetime
+    start_date: str
+    end_date: str
 
 class CompetitionReadDTO(BaseModel):
     id: str
     name: str
     organizer: str
     invite_code: str
-    start_date: datetime
-    end_date: datetime
+    start_date: str
+    end_date: str
 
 # Exercise DTOs
 class ExerciseCreateDTO(BaseModel):
@@ -53,6 +53,7 @@ class ExerciseCreateDTO(BaseModel):
     name: str
     score: int
     difficulty: str
+    port: int
 
 class ExerciseReadDTO(BaseModel):
     id: str
@@ -60,6 +61,7 @@ class ExerciseReadDTO(BaseModel):
     name: str
     score: int
     difficulty: str
+    port: int
 
 # Tag DTOs
 class TagCreateDTO(BaseModel):
@@ -85,11 +87,11 @@ class TeamReadDTO(BaseModel):
 
 # Container DTOs
 class ContainerCreateDTO(BaseModel):
-    deadline: datetime
+    deadline: str
 
 class ContainerReadDTO(BaseModel):
     id: str
-    deadline: datetime
+    deadline: str
 
 # Relationship DTOs
 class UserCompetitionCreateDTO(BaseModel):

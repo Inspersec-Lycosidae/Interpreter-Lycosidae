@@ -30,6 +30,15 @@ def get_user_by_username(db: Session, username: str) -> UserReadDTO:
         return UserReadDTO(id=user.id, username=user.username, email=user.email, phone_number=user.phone_number)
     return None
 
+def get_user_by_id(db: Session, user_id: str) -> UserReadDTO:
+    """
+    Busca um usuário pelo ID
+    """
+    user = db.query(User).filter(User.id == user_id).first()
+    if user:
+        return UserReadDTO(id=user.id, username=user.username, email=user.email, phone_number=user.phone_number)
+    return None
+
 def pass_hasher(password : str) -> str:
     """
     Gera hash da senha usando SHA-256 com salt
@@ -88,8 +97,8 @@ def get_competition_by_id(db: Session, competition_id: str) -> CompetitionReadDT
             name=competition.name,
             organizer=competition.organizer,
             invite_code=competition.invite_code,
-            start_date=competition.start_date,
-            end_date=competition.end_date
+            start_date=competition.start_date.isoformat(),
+            end_date=competition.end_date.isoformat()
         )
     return None
 
@@ -104,8 +113,8 @@ def get_competition_by_invite_code(db: Session, invite_code: str) -> Competition
             name=competition.name,
             organizer=competition.organizer,
             invite_code=competition.invite_code,
-            start_date=competition.start_date,
-            end_date=competition.end_date
+            start_date=competition.start_date.isoformat(),
+            end_date=competition.end_date.isoformat()
         )
     return None
 
@@ -120,12 +129,17 @@ def create_competition(db: Session, competition_dto: CompetitionCreateDTO) -> Co
                    invite_code=competition_dto.invite_code)
     
     try:
+        # Converter strings de data para objetos datetime
+        from datetime import datetime
+        start_date = datetime.fromisoformat(competition_dto.start_date.replace('Z', '+00:00'))
+        end_date = datetime.fromisoformat(competition_dto.end_date.replace('Z', '+00:00'))
+        
         competition = Competition(
             name=competition_dto.name,
             organizer=competition_dto.organizer,
             invite_code=competition_dto.invite_code,
-            start_date=competition_dto.start_date,
-            end_date=competition_dto.end_date
+            start_date=start_date,
+            end_date=end_date
         )
         db.add(competition)
         db.commit()
@@ -142,8 +156,8 @@ def create_competition(db: Session, competition_dto: CompetitionCreateDTO) -> Co
             name=competition.name,
             organizer=competition.organizer,
             invite_code=competition.invite_code,
-            start_date=competition.start_date,
-            end_date=competition.end_date
+            start_date=competition.start_date.isoformat(),
+            end_date=competition.end_date.isoformat()
         )
     
     except Exception as e:
@@ -163,11 +177,16 @@ def update_competition(db: Session, competition_id: str, competition_dto: Compet
     if not competition:
         return None
     
+    # Converter strings de data para objetos datetime
+    from datetime import datetime
+    start_date = datetime.fromisoformat(competition_dto.start_date.replace('Z', '+00:00'))
+    end_date = datetime.fromisoformat(competition_dto.end_date.replace('Z', '+00:00'))
+    
     competition.name = competition_dto.name
     competition.organizer = competition_dto.organizer
     competition.invite_code = competition_dto.invite_code
-    competition.start_date = competition_dto.start_date
-    competition.end_date = competition_dto.end_date
+    competition.start_date = start_date
+    competition.end_date = end_date
     
     db.commit()
     db.refresh(competition)
@@ -177,8 +196,8 @@ def update_competition(db: Session, competition_id: str, competition_dto: Compet
         name=competition.name,
         organizer=competition.organizer,
         invite_code=competition.invite_code,
-        start_date=competition.start_date,
-        end_date=competition.end_date
+        start_date=competition.start_date.isoformat(),
+        end_date=competition.end_date.isoformat()
     )
 
 def delete_competition(db: Session, competition_id: str) -> bool:
@@ -225,7 +244,8 @@ def get_exercise_by_id(db: Session, exercise_id: str) -> ExerciseReadDTO:
             link=exercise.link,
             name=exercise.name,
             score=exercise.score,
-            difficulty=exercise.difficulty
+            difficulty=exercise.difficulty,
+            port=exercise.port
         )
     return None
 
@@ -243,7 +263,8 @@ def create_exercise(db: Session, exercise_dto: ExerciseCreateDTO) -> ExerciseRea
             link=exercise_dto.link,
             name=exercise_dto.name,
             score=exercise_dto.score,
-            difficulty=exercise_dto.difficulty
+            difficulty=exercise_dto.difficulty,
+            port=exercise_dto.port
         )
         db.add(exercise)
         db.commit()
@@ -260,7 +281,8 @@ def create_exercise(db: Session, exercise_dto: ExerciseCreateDTO) -> ExerciseRea
             link=exercise.link,
             name=exercise.name,
             score=exercise.score,
-            difficulty=exercise.difficulty
+            difficulty=exercise.difficulty,
+            port=exercise.port
         )
     
     except Exception as e:
@@ -284,6 +306,7 @@ def update_exercise(db: Session, exercise_id: str, exercise_dto: ExerciseCreateD
     exercise.name = exercise_dto.name
     exercise.score = exercise_dto.score
     exercise.difficulty = exercise_dto.difficulty
+    exercise.port = exercise_dto.port
     
     db.commit()
     db.refresh(exercise)
@@ -544,7 +567,7 @@ def get_container_by_id(db: Session, container_id: str) -> ContainerReadDTO:
     """
     container = db.query(Container).filter(Container.id == container_id).first()
     if container:
-        return ContainerReadDTO(id=container.id, deadline=container.deadline)
+        return ContainerReadDTO(id=container.id, deadline=container.deadline.isoformat())
     return None
 
 def create_container(db: Session, container_dto: ContainerCreateDTO) -> ContainerReadDTO:
@@ -556,7 +579,11 @@ def create_container(db: Session, container_dto: ContainerCreateDTO) -> Containe
                    deadline=container_dto.deadline)
     
     try:
-        container = Container(deadline=container_dto.deadline)
+        # Converter string de data para objeto datetime
+        from datetime import datetime
+        deadline = datetime.fromisoformat(container_dto.deadline.replace('Z', '+00:00'))
+        
+        container = Container(deadline=deadline)
         db.add(container)
         db.commit()
         db.refresh(container)
@@ -564,9 +591,9 @@ def create_container(db: Session, container_dto: ContainerCreateDTO) -> Containe
         duration = time.time() - start_time
         db_logger.log_database("CREATE", "containers", duration, 
                               container_id=container.id,
-                              deadline=container.deadline)
+                              deadline=container.deadline.isoformat())
         
-        return ContainerReadDTO(id=container.id, deadline=container.deadline)
+        return ContainerReadDTO(id=container.id, deadline=container.deadline.isoformat())
     
     except Exception as e:
         duration = time.time() - start_time
@@ -584,11 +611,15 @@ def update_container(db: Session, container_id: str, container_dto: ContainerCre
     if not container:
         return None
     
-    container.deadline = container_dto.deadline
+    # Converter string de data para objeto datetime
+    from datetime import datetime
+    deadline = datetime.fromisoformat(container_dto.deadline.replace('Z', '+00:00'))
+    
+    container.deadline = deadline
     db.commit()
     db.refresh(container)
     
-    return ContainerReadDTO(id=container.id, deadline=container.deadline)
+    return ContainerReadDTO(id=container.id, deadline=container.deadline.isoformat())
 
 def delete_container(db: Session, container_id: str) -> bool:
     """
@@ -611,7 +642,7 @@ def delete_container(db: Session, container_id: str) -> bool:
         duration = time.time() - start_time
         db_logger.log_database("DELETE", "containers", duration, 
                               container_id=container_id,
-                              deadline=container.deadline)
+                              deadline=container.deadline.isoformat())
         
         return True
     

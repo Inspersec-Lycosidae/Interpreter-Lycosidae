@@ -216,7 +216,7 @@ async def get_competition_by_invite_endpoint(invite_code: str, db: Session = Dep
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.put("/competitions/{competition_id}", response_model=CompetitionReadDTO)
+@router.put("/competitions/{competition_id}")
 async def update_competition_endpoint(competition_id: str, payload: CompetitionCreateDTO, db: Session = Depends(get_db)):
     """
     Atualiza uma competição existente
@@ -232,7 +232,9 @@ async def update_competition_endpoint(competition_id: str, payload: CompetitionC
                 raise HTTPException(400, detail="Código de convite já existe")
         
         competition = update_competition(db, competition_id, payload)
-        return competition
+        if not competition:
+            raise HTTPException(404, detail="Competição não encontrada")
+        return competition.dict()
         
     except HTTPException as e:
         raise e
@@ -497,7 +499,7 @@ async def create_team_endpoint(payload: TeamCreateDTO, db: Session = Depends(get
         if not competition:
             raise HTTPException(400, detail="Competição não encontrada")
         
-        creator = get_user_by_email(db, payload.creator) or get_user_by_username(db, payload.creator)
+        creator = get_user_by_id(db, payload.creator)
         if not creator:
             raise HTTPException(400, detail="Criador não encontrado")
         
@@ -536,7 +538,7 @@ async def update_team_endpoint(team_id: str, payload: TeamCreateDTO, db: Session
         if not competition:
             raise HTTPException(400, detail="Competição não encontrada")
         
-        creator = get_user_by_email(db, payload.creator) or get_user_by_username(db, payload.creator)
+        creator = get_user_by_id(db, payload.creator)
         if not creator:
             raise HTTPException(400, detail="Criador não encontrado")
         
@@ -569,14 +571,14 @@ async def delete_team_endpoint(team_id: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/containers", response_model=ContainerReadDTO, status_code=201)
+@router.post("/containers", status_code=201)
 async def create_container_endpoint(payload: ContainerCreateDTO, db: Session = Depends(get_db)):
     """
     Cria um novo container
     """
     try:
         container = create_container(db, payload)
-        return container
+        return container.dict()
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -644,7 +646,7 @@ async def create_user_competition_endpoint(payload: UserCompetitionCreateDTO, db
                 endpoint="/route/user-competitions")
     
     try:
-        user = get_user_by_email(db, payload.user_id) or get_user_by_username(db, payload.user_id)
+        user = get_user_by_id(db, payload.user_id)
         if not user:
             logger.warning("Tentativa de criar relacionamento com usuário inexistente", 
                           user_id=payload.user_id)
@@ -746,7 +748,7 @@ async def create_user_team_endpoint(payload: UserTeamCreateDTO, db: Session = De
     Cria um relacionamento usuário-time
     """
     try:
-        user = get_user_by_email(db, payload.user_id) or get_user_by_username(db, payload.user_id)
+        user = get_user_by_id(db, payload.user_id)
         if not user:
             raise HTTPException(400, detail="Usuário não encontrado")
         

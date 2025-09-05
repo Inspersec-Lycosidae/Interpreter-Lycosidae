@@ -35,7 +35,7 @@ class Exercise(Base):
     name = Column(String(100), nullable=False)
     score = Column(Integer, nullable=False)
     difficulty = Column(String(20), nullable=False)
-
+    port = Column(Integer, nullable=False)
 class Tag(Base):
     __tablename__ = 'tags'
 
