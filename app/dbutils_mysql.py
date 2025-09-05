@@ -245,7 +245,7 @@ def get_exercise_by_id(db: Session, exercise_id: str) -> ExerciseReadDTO:
             name=exercise.name,
             score=exercise.score,
             difficulty=exercise.difficulty,
-            port=exercise.port
+            port=exercise.port 
         )
     return None
 
@@ -316,7 +316,8 @@ def update_exercise(db: Session, exercise_id: str, exercise_dto: ExerciseCreateD
         link=exercise.link,
         name=exercise.name,
         score=exercise.score,
-        difficulty=exercise.difficulty
+        difficulty=exercise.difficulty,
+        port=exercise.port          
     )
 
 def delete_exercise(db: Session, exercise_id: str) -> bool:
